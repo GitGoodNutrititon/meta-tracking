@@ -7,7 +7,8 @@ if (window.fbq) {
 
 // Meta Tracking Code
 (async function() {
-  const serverUrl = "https://server-side-tagging-o5rufe5lxq-uc.a.run.app";
+  const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
+  
   const META_EVENTS = {
     STANDARD: [
       'AddPaymentInfo',
@@ -42,7 +43,10 @@ if (window.fbq) {
   }
 
   function generateUniqueId() {
-    return 'br_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
 
   function getCookie(name) {
@@ -215,46 +219,70 @@ if (window.fbq) {
 
   async function trackEvent(eventName, eventParams = {}) {
     try {
-      // 1. Generate consistent event ID first
+      // Validate event name
+      if (!META_EVENTS.STANDARD.includes(eventName)) {
+        console.warn(`Warning: ${eventName} is not a standard Meta event name`);
+      }
+
+      // Generate consistent identifiers
       const eventId = generateUniqueId();
       const eventTime = Math.floor(Date.now() / 1000);
-      
-      // 2. Get user data BEFORE sending events
-      const userData = {
-        fbp: getCookie('_fbp') || createFBP(),
-        fbc: getFBC(),
-        client_user_agent: navigator.userAgent,
-        client_ip_address: null // Server will populate this
-      };
 
-      // 3. Send browser event with ID
+      // Ensure FBP exists and get FBC
+      const fbp = getCookie('_fbp') || createFBP();
+      if (!getCookie('_fbp')) {
+        document.cookie = `_fbp=${fbp}; path=/; max-age=7776000`;
+      }
+      const fbc = getFBC();
+
+      // Track via browser pixel
       fbq('track', eventName, {
         ...eventParams,
-        eventID: eventId // Critical for deduplication
+        eventID: eventId
       });
 
-      // 4. Send server event with matching ID and user data
+      // Prepare server event
       const serverEvent = {
         event_name: eventName,
         event_time: eventTime,
-        event_id: eventId, // Must match browser eventID
+        event_id: eventId,
         event_source_url: window.location.href,
-        user_data: userData,
-        custom_data: eventParams
+        user_data: {
+          client_user_agent: navigator.userAgent,
+          fbp: fbp,
+          fbc: fbc
+        },
+        custom_data: eventParams,
+        action_source: 'website',
+        pixel_id: PIXEL_ID
       };
 
-      await sendServerEvent(serverEvent);
-      console.log(`Event tracked (ID: ${eventId})`);
+      // Send to server
+      const response = await fetch('YOUR_SERVER_ENDPOINT', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(serverEvent)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      console.log(`Event tracked successfully (ID: ${eventId})`);
+      return eventId;
+
     } catch (error) {
       console.error('Failed to track event:', error);
+      return null;
     }
   }
 
   // Initialize tracking
   window.metaTracker = {
     trackEvent,
-    META_EVENTS,
-    generateUniqueId
+    META_EVENTS
   };
 
   // Track initial PageView
