@@ -8,6 +8,7 @@ if (window.fbq) {
 // Meta Tracking Code
 (async function() {
   const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
+  const serverUrl = "https://server-side-tagging-o5rufe5lxq-uc.a.run.app";
   
   const META_EVENTS = {
     STANDARD: [
@@ -33,15 +34,6 @@ if (window.fbq) {
   };
 
   // Utility Functions
-  async function hashData(data) {
-    if (!data) return '';
-    const encoder = new TextEncoder();
-    const hashedData = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-    return Array.from(new Uint8Array(hashedData))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
   function generateUniqueId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -62,17 +54,6 @@ if (window.fbq) {
     return `fb.1.${now}.${randNumber}`;
   }
 
-  async function getClientIP() {
-    try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      console.error('Error getting IP:', error);
-      return '';
-    }
-  }
-
   function getFBC() {
     const fbcCookie = getCookie('fbc');
     if (fbcCookie) return fbcCookie;
@@ -87,148 +68,71 @@ if (window.fbq) {
     return '';
   }
 
-  function normalizeEventTime(timestamp) {
-    return Math.floor(timestamp / 1000);
-  }
+  // Event Queue Management
+  let eventQueue = [];
+  const MAX_BATCH_SIZE = 10;
+  const RETRY_DELAY = 1000; // 1 second
+  const MAX_RETRIES = 3;
 
-  // Event Queue and Batching
-  const eventQueue = [];
-  const BATCH_SIZE = 50;
-  const retryQueue = [];
-  const MAX_RETRIES = 2;
-  const MAX_QUEUE_SIZE = 50;
-
-  function addToEventQueue(event) {
+  function addToQueue(event) {
     eventQueue.push(event);
-    if (eventQueue.length >= BATCH_SIZE) {
-      sendEventBatch(eventQueue.splice(0, BATCH_SIZE));
+    if (eventQueue.length >= MAX_BATCH_SIZE) {
+      processQueue();
     }
   }
 
-  function addToRetryQueue(event, attempts = 0) {
-    if (attempts >= MAX_RETRIES || retryQueue.length >= MAX_QUEUE_SIZE) {
-      console.error('Max retry attempts reached or queue full:', event);
-      return;
+  function addToRetryQueue(event) {
+    if (event.retries < MAX_RETRIES) {
+      event.retries += 1;
+      setTimeout(() => {
+        addToQueue(event);
+      }, RETRY_DELAY * event.retries);
+    } else {
+      console.error('Max retries reached for event:', event);
     }
-    
-    const retryDelay = Math.min(Math.pow(2, attempts) * 1000, 5000);
-    setTimeout(() => {
-      sendServerEvent(event).catch(() => {
-        if (attempts < MAX_RETRIES) {
-          addToRetryQueue(event, attempts + 1);
-        }
-      });
-    }, retryDelay);
   }
 
-  async function sendEventBatch(events) {
+  async function processQueue() {
+    if (eventQueue.length === 0) return;
+
+    const events = eventQueue.splice(0, MAX_BATCH_SIZE);
     try {
-      const response = await fetch(serverUrl + '/batch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ events })
-      });
+      const accessToken = await fetch('/get-access-token').then(response => response.text());
       
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    } catch (error) {
-      console.error('Failed to send event batch:', error);
-      events.forEach(event => addToRetryQueue(event));
-    }
-  }
-
-  async function sendServerEvent(event) {
-    try {
-      // Format the event data properly
-      const eventData = {
-        data: [{
-          event_name: event.event_name,
-          event_time: event.event_time,
-          event_id: event.event_id,
-          event_source_url: event.event_source_url,
-          user_data: event.user_data,
-          custom_data: event.custom_data,
-          action_source: "website"
-        }]
-      };
-
       const response = await fetch(serverUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
         },
-        mode: 'no-cors',
-        credentials: 'omit',
-        body: JSON.stringify(eventData)
+        body: JSON.stringify({
+          data: events,
+          pixel_id: PIXEL_ID
+        })
       });
 
-      if (response.type === 'opaque') {
-        console.log('Event sent successfully');
-        return;
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
+
+      console.log(`Batch of ${events.length} events processed successfully`);
     } catch (error) {
-      console.error('Failed to send event:', error);
-      if (!event._isRetry) {
-        event._isRetry = true;
-        addToRetryQueue(event);
-      }
+      console.error('Failed to process event batch:', error);
+      events.forEach(event => addToRetryQueue(event));
     }
   }
 
-  // Main Event Tracking Functions
-  async function createServerEvent(eventName, eventParams = {}) {
-    const eventId = eventParams.event_id || generateUniqueId();
-    const eventTime = normalizeEventTime(eventParams.event_time || Date.now());
-    
-    if (!getCookie('_fbp')) {
-      document.cookie = `_fbp=${createFBP()}; path=/; max-age=7776000`;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const userData = {
-      fn: await hashData(urlParams.get('first_name') || ''),
-      ln: await hashData(urlParams.get('last_name') || ''),
-      em: await hashData(urlParams.get('email') || ''),
-      ph: await hashData(urlParams.get('phone') || ''),
-      external_id: urlParams.get('external_id') || localStorage.getItem('user_external_id') || '',
-      client_ip_address: urlParams.get('client_ip_address') || await getClientIP() || '',
-      client_user_agent: navigator.userAgent,
-      fbp: getCookie('_fbp'),
-      fbc: getFBC()
-    };
-
-    const event = {
-      event_name: eventName,
-      event_time: eventTime,
-      event_id: eventId,
-      event_source_url: window.location.href,
-      action_source: "website",
-      user_data: userData,
-      custom_data: {
-        currency: 'USD',
-        ...eventParams
-      },
-      data_processing_options: [],
-      data_processing_options_country: 0,
-      data_processing_options_state: 0
-    };
-
-    return event;
-  }
-
+  // Main tracking function
   async function trackEvent(eventName, eventParams = {}) {
     try {
-      // Validate event name
       if (!META_EVENTS.STANDARD.includes(eventName)) {
         console.warn(`Warning: ${eventName} is not a standard Meta event name`);
       }
 
-      // Generate consistent identifiers
       const eventId = generateUniqueId();
       const eventTime = Math.floor(Date.now() / 1000);
 
-      // Ensure FBP exists and get FBC
+      // Ensure FBP exists
       const fbp = getCookie('_fbp') || createFBP();
       if (!getCookie('_fbp')) {
         document.cookie = `_fbp=${fbp}; path=/; max-age=7776000`;
@@ -254,23 +158,13 @@ if (window.fbq) {
         },
         custom_data: eventParams,
         action_source: 'website',
-        pixel_id: PIXEL_ID
+        retries: 0
       };
 
-      // Send to server
-      const response = await fetch('YOUR_SERVER_ENDPOINT', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(serverEvent)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-
-      console.log(`Event tracked successfully (ID: ${eventId})`);
+      // Add to processing queue
+      addToQueue(serverEvent);
+      
+      console.log(`Event queued for processing (ID: ${eventId})`);
       return eventId;
 
     } catch (error) {
@@ -279,13 +173,12 @@ if (window.fbq) {
     }
   }
 
-  // Initialize tracking
+  // Start queue processor
+  setInterval(processQueue, 1000);
+
+  // Expose tracking function globally
   window.metaTracker = {
     trackEvent,
     META_EVENTS
   };
-
-  // Track initial PageView
-  const pageViewEventId = generateUniqueId();
-  trackEvent('PageView', {}, { eventID: pageViewEventId });
 })();
