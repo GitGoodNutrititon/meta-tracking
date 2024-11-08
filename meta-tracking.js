@@ -136,6 +136,19 @@ if (window.fbq) {
 
   async function sendServerEvent(event) {
     try {
+      // Format the event data properly
+      const eventData = {
+        data: [{
+          event_name: event.event_name,
+          event_time: event.event_time,
+          event_id: event.event_id,
+          event_source_url: event.event_source_url,
+          user_data: event.user_data,
+          custom_data: event.custom_data,
+          action_source: "website"
+        }]
+      };
+
       const response = await fetch(serverUrl, {
         method: 'POST',
         headers: {
@@ -143,11 +156,11 @@ if (window.fbq) {
         },
         mode: 'no-cors',
         credentials: 'omit',
-        body: JSON.stringify(event)
+        body: JSON.stringify(eventData)
       });
 
       if (response.type === 'opaque') {
-        console.log('Event sent (opaque response)');
+        console.log('Event sent successfully');
         return;
       }
     } catch (error) {
@@ -200,34 +213,41 @@ if (window.fbq) {
     return event;
   }
 
-  let isTracking = false;
   async function trackEvent(eventName, eventParams = {}) {
-    if (isTracking) {
-      console.log('Event tracking in progress, skipping:', eventName);
-      return;
-    }
-    
     try {
-      isTracking = true;
-      const eventId = generateUniqueId();
-      
-      // Track via pixel
+      // Generate consistent identifiers
+      const eventId = eventParams.event_id || generateUniqueId();
+      const eventTime = Math.floor(Date.now() / 1000);
+
+      // Ensure FBP exists
+      if (!getCookie('_fbp')) {
+        document.cookie = `_fbp=${createFBP()}; path=/; max-age=7776000`;
+      }
+
+      // Track via pixel with eventID for deduplication
       fbq('track', eventName, {
         ...eventParams,
         eventID: eventId
       });
 
-      // Create server event
-      const serverEvent = await createServerEvent(eventName, {
-        ...eventParams,
-        event_id: eventId
-      });
+      // Send server event with same eventID
+      const serverEvent = {
+        event_name: eventName,
+        event_time: eventTime,
+        event_id: eventId,
+        event_source_url: window.location.href,
+        user_data: {
+          client_user_agent: navigator.userAgent,
+          fbp: getCookie('_fbp'),
+          fbc: getFBC()
+        },
+        custom_data: eventParams
+      };
 
       await sendServerEvent(serverEvent);
+      console.log(`Successfully tracked ${eventName} event (ID: ${eventId})`);
     } catch (error) {
-      console.error('Track event error:', error);
-    } finally {
-      isTracking = false;
+      console.error('Failed to track event:', error);
     }
   }
 
