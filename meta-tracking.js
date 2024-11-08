@@ -91,7 +91,8 @@ if (window.fbq) {
   const eventQueue = [];
   const BATCH_SIZE = 50;
   const retryQueue = [];
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 2;
+  const MAX_QUEUE_SIZE = 50;
 
   function addToEventQueue(event) {
     eventQueue.push(event);
@@ -101,14 +102,18 @@ if (window.fbq) {
   }
 
   function addToRetryQueue(event, attempts = 0) {
-    if (attempts >= MAX_RETRIES) {
-      console.error('Max retry attempts reached for event:', event);
+    if (attempts >= MAX_RETRIES || retryQueue.length >= MAX_QUEUE_SIZE) {
+      console.error('Max retry attempts reached or queue full:', event);
       return;
     }
     
-    const retryDelay = Math.pow(2, attempts) * 1000; // Exponential backoff
+    const retryDelay = Math.min(Math.pow(2, attempts) * 1000, 5000);
     setTimeout(() => {
-      sendServerEvent(event).catch(() => addToRetryQueue(event, attempts + 1));
+      sendServerEvent(event).catch(() => {
+        if (attempts < MAX_RETRIES) {
+          addToRetryQueue(event, attempts + 1);
+        }
+      });
     }, retryDelay);
   }
 
@@ -131,15 +136,6 @@ if (window.fbq) {
 
   async function sendServerEvent(event) {
     try {
-      const isTestMode = window.location.hostname === 'localhost' || 
-                        window.location.hostname.includes('staging');
-      
-      if (isTestMode) {
-        event.test_event_code = 'TEST12345';
-        console.log('Test mode event:', event);
-        return;
-      }
-
       const response = await fetch(serverUrl, {
         method: 'POST',
         headers: {
@@ -151,15 +147,15 @@ if (window.fbq) {
       });
 
       if (response.type === 'opaque') {
-        console.log('Event sent successfully (opaque response)');
+        console.log('Event sent (opaque response)');
         return;
       }
-
-      return await response.json();
     } catch (error) {
       console.error('Failed to send event:', error);
-      addToRetryQueue(event);
-      throw error;
+      if (!event._isRetry) {
+        event._isRetry = true;
+        addToRetryQueue(event);
+      }
     }
   }
 
@@ -204,38 +200,34 @@ if (window.fbq) {
     return event;
   }
 
+  let isTracking = false;
   async function trackEvent(eventName, eventParams = {}) {
+    if (isTracking) {
+      console.log('Event tracking in progress, skipping:', eventName);
+      return;
+    }
+    
     try {
+      isTracking = true;
       const eventId = generateUniqueId();
-      const eventTime = normalizeEventTime(Date.now());
-
+      
       // Track via pixel
       fbq('track', eventName, {
         ...eventParams,
         eventID: eventId
       });
 
-      // Create and send server event
+      // Create server event
       const serverEvent = await createServerEvent(eventName, {
         ...eventParams,
-        event_id: eventId,
-        event_time: eventTime
+        event_id: eventId
       });
 
       await sendServerEvent(serverEvent);
-
-      // Push to dataLayer
-      window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({
-        'event': 'fb_' + eventName.toLowerCase(),
-        'fb_event_id': eventId,
-        'fb_event_name': eventName,
-        'fb_event_data': eventParams
-      });
-
-      console.log(`Successfully tracked ${eventName} event with ID: ${eventId}`);
     } catch (error) {
-      console.error('Failed to track event:', error);
+      console.error('Track event error:', error);
+    } finally {
+      isTracking = false;
     }
   }
 
@@ -250,25 +242,3 @@ if (window.fbq) {
   const pageViewEventId = generateUniqueId();
   trackEvent('PageView', {}, { eventID: pageViewEventId });
 })();
-async function sendEventBatch(events) {
-    try {
-      const response = await fetch(serverUrl + '/batch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        mode: 'no-cors', // Add this line
-        credentials: 'omit', // Add this line
-        body: JSON.stringify({ events })
-      });
-      
-      // Modified response handling
-      if (response.type === 'opaque') {
-        console.log('Batch sent successfully (opaque response)');
-        return;
-      }
-    } catch (error) {
-      console.error('Failed to send event batch:', error);
-      events.forEach(event => addToRetryQueue(event));
-    }
-  }
