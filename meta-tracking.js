@@ -215,37 +215,36 @@ if (window.fbq) {
 
   async function trackEvent(eventName, eventParams = {}) {
     try {
-      // Generate consistent identifiers
-      const eventId = eventParams.event_id || generateUniqueId();
+      // 1. Generate consistent event ID first
+      const eventId = generateUniqueId();
       const eventTime = Math.floor(Date.now() / 1000);
+      
+      // 2. Get user data BEFORE sending events
+      const userData = {
+        fbp: getCookie('_fbp') || createFBP(),
+        fbc: getFBC(),
+        client_user_agent: navigator.userAgent,
+        client_ip_address: null // Server will populate this
+      };
 
-      // Ensure FBP exists
-      if (!getCookie('_fbp')) {
-        document.cookie = `_fbp=${createFBP()}; path=/; max-age=7776000`;
-      }
-
-      // Track via pixel with eventID for deduplication
+      // 3. Send browser event with ID
       fbq('track', eventName, {
         ...eventParams,
-        eventID: eventId
+        eventID: eventId // Critical for deduplication
       });
 
-      // Send server event with same eventID
+      // 4. Send server event with matching ID and user data
       const serverEvent = {
         event_name: eventName,
         event_time: eventTime,
-        event_id: eventId,
+        event_id: eventId, // Must match browser eventID
         event_source_url: window.location.href,
-        user_data: {
-          client_user_agent: navigator.userAgent,
-          fbp: getCookie('_fbp'),
-          fbc: getFBC()
-        },
+        user_data: userData,
         custom_data: eventParams
       };
 
       await sendServerEvent(serverEvent);
-      console.log(`Successfully tracked ${eventName} event (ID: ${eventId})`);
+      console.log(`Event tracked (ID: ${eventId})`);
     } catch (error) {
       console.error('Failed to track event:', error);
     }
