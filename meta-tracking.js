@@ -244,19 +244,3 @@ if (window.fbq) {
   const pageViewEventId = generateUniqueId();
   trackEvent('PageView', {}, { eventID: pageViewEventId });
 })();
-
-// Test Implementation
-<script>
-  window.addEventListener('load', function() {
-    if (window.metaTracker) {
-      console.log('Meta tracking loaded successfully');
-      // Use a standard event for testing
-      window.metaTracker.trackEvent('PageView', {
-        value: 1.00,
-        currency: 'USD'
-      });
-    } else {
-      console.error('Meta tracking failed to load');
-    }
-  });
-</script>
