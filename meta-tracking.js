@@ -145,10 +145,16 @@ if (window.fbq) {
         headers: {
           'Content-Type': 'application/json',
         },
+        mode: 'no-cors',
+        credentials: 'omit',
         body: JSON.stringify(event)
       });
 
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (response.type === 'opaque') {
+        console.log('Event sent successfully (opaque response)');
+        return;
+      }
+
       return await response.json();
     } catch (error) {
       console.error('Failed to send event:', error);
@@ -244,3 +250,25 @@ if (window.fbq) {
   const pageViewEventId = generateUniqueId();
   trackEvent('PageView', {}, { eventID: pageViewEventId });
 })();
+async function sendEventBatch(events) {
+    try {
+      const response = await fetch(serverUrl + '/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'no-cors', // Add this line
+        credentials: 'omit', // Add this line
+        body: JSON.stringify({ events })
+      });
+      
+      // Modified response handling
+      if (response.type === 'opaque') {
+        console.log('Batch sent successfully (opaque response)');
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to send event batch:', error);
+      events.forEach(event => addToRetryQueue(event));
+    }
+  }
