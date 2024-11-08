@@ -1,15 +1,9 @@
-// Meta Pixel Base Code
-!function(f,b,e,v,n,t,s) {
-  if(f.fbq)return;
-  n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)
-}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
-
-// Initialize with Bullard Nutrition Pixel ID
-fbq('init', '766014511309126');
+// Check if pixel is already initialized
+if (window.fbq) {
+  console.log('Meta Pixel already initialized');
+} else {
+  console.warn('Meta Pixel not initialized. Events may not track properly.');
+}
 
 // Meta Tracking Code
 (async function() {
@@ -136,12 +130,16 @@ fbq('init', '766014511309126');
   }
 
   async function sendServerEvent(event) {
-    const isTestMode = process.env.NODE_ENV === 'development';
-    if (isTestMode) {
-      event.test_event_code = 'TEST12345';
-    }
-
     try {
+      const isTestMode = window.location.hostname === 'localhost' || 
+                        window.location.hostname.includes('staging');
+      
+      if (isTestMode) {
+        event.test_event_code = 'TEST12345';
+        console.log('Test mode event:', event);
+        return;
+      }
+
       const response = await fetch(serverUrl, {
         method: 'POST',
         headers: {
@@ -246,3 +244,19 @@ fbq('init', '766014511309126');
   const pageViewEventId = generateUniqueId();
   trackEvent('PageView', {}, { eventID: pageViewEventId });
 })();
+
+// Test Implementation
+<script>
+  window.addEventListener('load', function() {
+    if (window.metaTracker) {
+      console.log('Meta tracking loaded successfully');
+      // Use a standard event for testing
+      window.metaTracker.trackEvent('PageView', {
+        value: 1.00,
+        currency: 'USD'
+      });
+    } else {
+      console.error('Meta tracking failed to load');
+    }
+  });
+</script>
