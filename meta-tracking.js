@@ -8,7 +8,7 @@ if (window.fbq) {
 // Meta Tracking Code
 (async function() {
   const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
-  const serverUrl = "https://server-side-tagging-o5rufe5lxq-uc.a.run.app";
+  const SERVER_URL = "https://server-side-tagging-542968678390.us-central1.run.app";
   
   const META_EVENTS = {
     STANDARD: [
@@ -99,7 +99,7 @@ if (window.fbq) {
     try {
       const accessToken = await fetch('/get-access-token').then(response => response.text());
       
-      const response = await fetch(serverUrl, {
+      const response = await fetch(SERVER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
