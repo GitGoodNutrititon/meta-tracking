@@ -5,6 +5,16 @@ if (window.fbq) {
   console.warn('Meta Pixel not initialized. Events may not track properly.');
 }
 
+// Verify pixel initialization
+if (!window.fbq) {
+  throw new Error('Facebook Pixel must be initialized before meta-tracking.js');
+}
+
+// Verify pixel ID matches
+if (window._fbq && window._fbq.pixelId !== '766014511309126') {
+  console.warn('Pixel ID mismatch detected');
+}
+
 // Meta Tracking Code
 (async function() {
   const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
