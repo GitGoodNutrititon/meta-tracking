@@ -2,11 +2,7 @@
 if (window.fbq) {
   console.log('Meta Pixel already initialized');
 } else {
-  console.warn('Meta Pixel not initialized. Events may not track properly.');
-}
-
-// Verify pixel initialization
-if (!window.fbq) {
+  console.error('Meta Pixel not initialized. Events will not track properly. Please ensure Facebook Header Code is loaded first.');
   throw new Error('Facebook Pixel must be initialized before meta-tracking.js');
 }
 
@@ -14,7 +10,6 @@ if (!window.fbq) {
 if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   console.warn('Pixel ID mismatch detected');
 }
-
 // Meta Tracking Code
 (async function() {
   const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
@@ -27,20 +22,138 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       'AddToWishlist',
       'CompleteRegistration',
       'Contact',
-      'CustomizeProduct',
-      'Donate',
       'FindLocation',
       'InitiateCheckout',
-      'Lead',
-      'PageView',
       'Purchase',
       'Schedule',
       'Search',
-      'StartTrial',
-      'SubmitApplication',
-      'Subscribe',
-      'ViewContent'
-    ]
+      'StartTrial'
+    ],
+    REQUIRED_PARAMS: {
+      'AddPaymentInfo': [
+        'action_source',
+        'content_ids',
+        'currency',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time',
+        'order_id',
+        'value'
+      ],
+      'AddToCart': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'AddToWishlist': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'CompleteRegistration': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'Contact': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'FindLocation': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'InitiateCheckout': [
+        'action_source',
+        'content_ids',
+        'content_type',
+        'contents',
+        'currency',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time',
+        'num_items',
+        'value'
+      ],
+      'Purchase': [
+        'action_source',
+        'content_ids',
+        'content_type',
+        'contents',
+        'currency',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time',
+        'num_items',
+        'order_id',
+        'value'
+      ],
+      'Schedule': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'Search': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'StartTrial': [
+        'action_source',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ]
+    },
+    CUSTOMER_PARAMS: {
+      // These parameters are required for all events
+      REQUIRED: [
+        'client_user_agent',
+        'fbp',
+        'fbc',
+        'client_ip_address'
+      ],
+      // These should be included when available
+      OPTIONAL: [
+        'em',
+        'ph',
+        'ct',
+        'st',
+        'zp',
+        'country',
+        'external_id',
+        'subscription_id'
+      ]
+    }
+  };
+
+  // Add GTM to Meta event mapping
+  const GTM_TO_META_MAPPING = {
+    'gtm.linkClick': 'Click',
+    'form_submit': 'Lead',
+    'form_start': 'InitiateForm',
+    'gtm.scrollDepth': 'PageScroll',
+    // Add other mappings as needed
   };
 
   // Utility Functions
@@ -85,14 +198,20 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       client_ip: null, // Server will populate this
       fbp: getCookie('_fbp') || createFBP(),
       fbc: getFBC(),
-      external_id: getCookie('user_id'), // Add if you have user IDs
-      // Add any available:
-      // em: hashedEmail,  
-      // ph: hashedPhone,
-      // country: userCountry,
-      // ct: userCity,
-      // st: userState,
-      // zp: userZip
+      external_id: getCookie('user_id'),
+      subscription_id: getCookie('subscription_id'),
+      em: null,  // Will be hashed when provided
+      ph: null,  // Will be hashed when provided
+      fn: null,  // Will be hashed when provided
+      ln: null,  // Will be hashed when provided
+      ge: null,  // Will be hashed when provided
+      db: null,  // Will be hashed when provided
+      ct: null,  // Will be hashed when provided
+      st: null,  // Will be hashed when provided
+      zp: null,  // Will be hashed when provided
+      country: null,  // Will be hashed when provided
+      fb_login_id: null,
+      lead_id: null
     };
   }
 
@@ -134,23 +253,22 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       events.forEach(event => addToRetryQueue(event));
     }
   }
+  // Enhanced validation
+  function validateEventParams(eventName, params, userData) {
+    // Check event-specific parameters
+    const requiredParams = META_EVENTS.REQUIRED_PARAMS[eventName] || [];
+    const missingParams = requiredParams.filter(param => !params[param]);
+    
+    // Check customer parameters
+    const requiredCustomerParams = META_EVENTS.CUSTOMER_PARAMS.REQUIRED;
+    const missingCustomerParams = requiredCustomerParams.filter(param => !userData[param]);
 
-  // Add validation for required parameters per event type
-  function validateEventParams(eventName, params) {
-    const required = {
-      'Purchase': ['value', 'currency'],
-      'AddToCart': ['content_ids', 'content_type', 'value', 'currency'],
-      'InitiateCheckout': ['value', 'currency', 'content_ids'],
-      'ViewContent': ['content_ids', 'content_type'],
-      'Lead': ['content_category', 'content_name']
-    };
-
-    if (required[eventName]) {
-      const missing = required[eventName].filter(param => !params[param]);
-      if (missing.length) {
-        console.warn(`Missing required parameters for ${eventName}: ${missing.join(', ')}`);
-        return false;
-      }
+    if (missingParams.length || missingCustomerParams.length) {
+      console.warn(`Missing parameters for ${eventName}:`, {
+        eventParams: missingParams,
+        customerParams: missingCustomerParams
+      });
+      return false;
     }
     return true;
   }
@@ -158,12 +276,15 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   // Enhanced tracking function
   async function trackEvent(eventName, eventParams = {}) {
     try {
-      if (!META_EVENTS.STANDARD.includes(eventName)) {
-        console.warn(`Warning: ${eventName} is not a standard Meta event name`);
+      // Convert GTM events to Meta standard events if applicable
+      const metaEventName = GTM_TO_META_MAPPING[eventName] || eventName;
+      
+      if (!META_EVENTS.STANDARD.includes(metaEventName)) {
+        console.warn(`Warning: ${metaEventName} is not a standard Meta event name`);
       }
 
       // Validate required parameters
-      if (!validateEventParams(eventName, eventParams)) {
+      if (!validateEventParams(metaEventName, eventParams, getUserData())) {
         return null;
       }
 
@@ -186,18 +307,22 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       };
 
       // Track via browser pixel
-      fbq('track', eventName, eventData);
+      fbq('track', metaEventName, eventData);
 
       // Prepare enhanced server event
       const serverEvent = {
-        event_name: eventName,
+        event_name: metaEventName,
         event_time: eventTime,
         event_id: eventId,
         event_source_url: window.location.href,
         user_data: getUserData(),
         custom_data: eventData,
         action_source: 'website',
-        retries: 0
+        opt_out: false,
+        data_processing_options: [],
+        data_processing_options_country: 0,
+        data_processing_options_state: 0,
+        referrer_url: document.referrer
       };
 
       // Add to processing queue
@@ -221,3 +346,4 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
     META_EVENTS
   };
 })();
+
