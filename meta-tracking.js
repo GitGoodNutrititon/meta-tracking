@@ -27,7 +27,13 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       'Purchase',
       'Schedule',
       'Search',
-      'StartTrial'
+      'StartTrial',
+      'CustomizeProduct',
+      'Donate',
+      'Lead',
+      'SubmitApplication',
+      'Subscribe',
+      'ViewContent'
     ],
     REQUIRED_PARAMS: {
       'AddPaymentInfo': [
@@ -119,6 +125,19 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       ],
       'StartTrial': [
         'action_source',
+        'currency',
+        'value',
+        'predicted_ltv',
+        'event_id',
+        'event_name',
+        'event_source_url',
+        'event_time'
+      ],
+      'Subscribe': [
+        'action_source',
+        'currency',
+        'value',
+        'predicted_ltv',
         'event_id',
         'event_name',
         'event_source_url',
@@ -195,21 +214,21 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   function getUserData() {
     return {
       client_user_agent: navigator.userAgent,
-      client_ip: null, // Server will populate this
+      client_ip_address: null,
       fbp: getCookie('_fbp') || createFBP(),
       fbc: getFBC(),
       external_id: getCookie('user_id'),
       subscription_id: getCookie('subscription_id'),
-      em: null,  // Will be hashed when provided
-      ph: null,  // Will be hashed when provided
-      fn: null,  // Will be hashed when provided
-      ln: null,  // Will be hashed when provided
-      ge: null,  // Will be hashed when provided
-      db: null,  // Will be hashed when provided
-      ct: null,  // Will be hashed when provided
-      st: null,  // Will be hashed when provided
-      zp: null,  // Will be hashed when provided
-      country: null,  // Will be hashed when provided
+      em: null,
+      ph: null,
+      fn: null,
+      ln: null,
+      ge: null,
+      db: null,
+      ct: null,
+      st: null,
+      zp: null,
+      country: null,
       fb_login_id: null,
       lead_id: null
     };
@@ -224,35 +243,34 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   function addToQueue(event) { /* ... */ }
   function addToRetryQueue(event) { /* ... */ }
   
+  const SERVER_ENDPOINT = 'https://us-central1-gtm-wj4m8t36-nwq2m.cloudfunctions.net/meta-tracking';
+
+  // Update your processQueue function to use this endpoint
   async function processQueue() {
     if (eventQueue.length === 0) return;
 
     const events = eventQueue.splice(0, MAX_BATCH_SIZE);
     try {
-      const accessToken = await fetch('/get-access-token').then(response => response.text());
-      
-      const response = await fetch(SERVER_URL, {
+      const response = await fetch(SERVER_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
         },
-        body: JSON.stringify({
-          data: events,
-          pixel_id: PIXEL_ID
-        })
+        body: JSON.stringify({ data: events })
       });
 
       if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      console.log(`Batch of ${events.length} events processed successfully`);
+      console.log('Events processed successfully');
     } catch (error) {
-      console.error('Failed to process event batch:', error);
-      events.forEach(event => addToRetryQueue(event));
+      console.error('Failed to process events:', error);
+      // Add events back to queue for retry
+      events.forEach(event => addToQueue(event));
     }
   }
+
   // Enhanced validation
   function validateEventParams(eventName, params, userData) {
     // Check event-specific parameters
@@ -273,64 +291,81 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
     return true;
   }
 
-  // Enhanced tracking function
+  // Replace the existing trackEvent function with this updated version
   async function trackEvent(eventName, eventParams = {}) {
     try {
-      // Convert GTM events to Meta standard events if applicable
-      const metaEventName = GTM_TO_META_MAPPING[eventName] || eventName;
+      const isStandardEvent = META_EVENTS.STANDARD.includes(eventName);
+      const isGTMEvent = META_EVENTS.GTM_EVENTS.includes(eventName);
       
-      if (!META_EVENTS.STANDARD.includes(metaEventName)) {
-        console.warn(`Warning: ${metaEventName} is not a standard Meta event name`);
-      }
-
-      // Validate required parameters
-      if (!validateEventParams(metaEventName, eventParams, getUserData())) {
-        return null;
+      if (!isStandardEvent && !isGTMEvent) {
+        console.warn(`Warning: ${eventName} is not a recognized event name`);
       }
 
       const eventId = generateUniqueId();
       const eventTime = Math.floor(Date.now() / 1000);
+      const userData = getUserData();
 
-      // Ensure FBP exists
-      const fbp = getCookie('_fbp') || createFBP();
-      if (!getCookie('_fbp')) {
-        document.cookie = `_fbp=${fbp}; path=/; max-age=7776000`;
+      // Base event data structure
+      const eventData = {
+        action_source: "website",
+        event_id: eventId,
+        event_name: eventName,
+        event_source_url: window.location.href,
+        event_time: eventTime,
+        user_data: userData,
+        custom_data: {
+          currency: eventParams.currency || "USD",
+          value: eventParams.value || "0.00"
+        }
+      };
+
+      // Add event-specific parameters based on event type
+      switch(eventName) {
+        case 'Purchase':
+        case 'InitiateCheckout':
+          eventData.custom_data = {
+            ...eventData.custom_data,
+            content_ids: eventParams.content_ids || [],
+            content_type: eventParams.content_type || "product",
+            contents: eventParams.contents || [],
+            num_items: eventParams.num_items,
+            order_id: eventParams.order_id
+          };
+          break;
+        case 'AddPaymentInfo':
+          eventData.custom_data = {
+            ...eventData.custom_data,
+            content_ids: eventParams.content_ids || [],
+            order_id: eventParams.order_id
+          };
+          break;
+        // Add other specific event types as needed
       }
 
-      // Add page metadata
-      const eventData = {
-        ...eventParams,
-        page_location: window.location.href,
-        page_title: document.title,
-        page_referrer: document.referrer,
-        eventID: eventId
-      };
-
-      // Track via browser pixel
-      fbq('track', metaEventName, eventData);
-
-      // Prepare enhanced server event
-      const serverEvent = {
-        event_name: metaEventName,
-        event_time: eventTime,
+      // 1. Track via browser pixel (client-side)
+      const pixelData = {
+        ...eventData.custom_data,
         event_id: eventId,
-        event_source_url: window.location.href,
-        user_data: getUserData(),
-        custom_data: eventData,
-        action_source: 'website',
-        opt_out: false,
-        data_processing_options: [],
-        data_processing_options_country: 0,
-        data_processing_options_state: 0,
-        referrer_url: document.referrer
+        user_data: {
+          fbp: userData.fbp,
+          fbc: userData.fbc
+        }
       };
-
-      // Add to processing queue
-      addToQueue(serverEvent);
       
-      console.log(`Event queued for processing (ID: ${eventId})`);
-      return eventId;
+      // Send to Meta Pixel
+      fbq('track', eventName, pixelData);
 
+      // 2. Queue for server-side tracking (Conversions API)
+      addToQueue(eventData);
+      
+      // Log successful tracking
+      console.log(`Event ${eventName} tracked successfully`, {
+        eventId,
+        pixel: true,
+        server: true
+      });
+
+      return eventId;
     } catch (error) {
       console.error('Failed to track event:', error);
       return null;
@@ -346,4 +381,30 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
     META_EVENTS
   };
 })();
+
+// Add this validation function
+function validateServerEvent(event) {
+  // Required fields validation
+  const requiredFields = ['event_name', 'event_time', 'user_data', 'action_source'];
+  const missingFields = requiredFields.filter(field => !event[field]);
+  
+  if (missingFields.length > 0) {
+    console.error('Missing required fields:', missingFields);
+    return false;
+  }
+  
+  // Validate event_time is within 7 days
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
+  if (event.event_time < sevenDaysAgo) {
+    console.error('event_time must be within the last 7 days');
+    return false;
+  }
+  
+  return true;
+}
+
+// Use validation before sending
+if (!validateServerEvent(serverEvent)) {
+  return null;
+}
 
