@@ -217,6 +217,7 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       client_ip_address: null,
       fbp: getCookie('_fbp') || createFBP(),
       fbc: getFBC(),
+      fb_login_id: getCookie('fb_login_id'),
       external_id: getCookie('user_id'),
       subscription_id: getCookie('subscription_id'),
       em: null,
@@ -229,7 +230,6 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       st: null,
       zp: null,
       country: null,
-      fb_login_id: null,
       lead_id: null
     };
   }
