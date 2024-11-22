@@ -243,15 +243,26 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   function addToQueue(event) { /* ... */ }
   function addToRetryQueue(event) { /* ... */ }
   
-  const SERVER_ENDPOINT = 'https://us-central1-gtm-wj4m8t36-nwq2m.cloudfunctions.net/meta-tracking';
+  const CONFIG = {
+    GTM: {
+      WEB: 'GTM-WS93H98',
+      SERVER: 'GTM-WJ4M8T36'
+    },
+    ENDPOINTS: {
+      WEB: 'https://www.googletagmanager.com/gtag/js',
+      SERVER: 'https://us-central1-gtm-wj4m8t36-nwq2m.cloudfunctions.net/meta-tracking'
+    }
+  };
 
-  // Update your processQueue function to use this endpoint
+  // Update processQueue function to send to both endpoints
   async function processQueue() {
     if (eventQueue.length === 0) return;
 
     const events = eventQueue.splice(0, MAX_BATCH_SIZE);
+    
     try {
-      const response = await fetch(SERVER_ENDPOINT, {
+      // Send to Web GTM
+      await fetch(`${CONFIG.ENDPOINTS.WEB}?id=${CONFIG.GTM.WEB}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -259,11 +270,16 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         body: JSON.stringify({ data: events })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // Send to Server GTM
+      await fetch(CONFIG.ENDPOINTS.SERVER, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: events })
+      });
 
-      console.log('Events processed successfully');
+      console.log('Events processed successfully to both GTM containers');
     } catch (error) {
       console.error('Failed to process events:', error);
       // Add events back to queue for retry
