@@ -13,7 +13,7 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
 // Meta Tracking Code
 (async function() {
   const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
-  const SERVER_URL = "https://meta-tracking-o5rufe5lxq-uc.a.run.app";
+  const SERVER_URL = "https://server-side-tagging-o5rufe5lxq-uc.a.run.app";
   
   const META_EVENTS = {
     STANDARD: [
@@ -250,7 +250,7 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
     },
     ENDPOINTS: {
       WEB: 'https://www.googletagmanager.com/gtag/js',
-      SERVER: 'https://us-central1-gtm-wj4m8t36-nwq2m.cloudfunctions.net/meta-tracking'
+      SERVER: 'https://server-side-tagging-o5rufe5lxq-uc.a.run.app'
     }
   };
 
