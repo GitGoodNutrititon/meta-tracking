@@ -34,7 +34,13 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       'Lead',
       'SubmitApplication',
       'Subscribe',
-      'ViewContent'
+      'ViewContent',
+      'conversion',
+      'gtm.historyChange-v2',
+      'gtm.linkClick',
+      'gtm.load',
+      'gtm.scrollDepth',
+      'scroll'
     ],
     
     EVENT_PARAMS: {
@@ -47,11 +53,17 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         event_time: true
       },
       
-      // Specific event parameters
+      // Event-specific parameters
       AddPaymentInfo: {
         content_ids: true,
         currency: true,
         order_id: true,
+        value: true
+      },
+      
+      AddToCart: {
+        content_ids: true,
+        currency: true,
         value: true
       },
       
@@ -71,6 +83,35 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         currency: true,
         num_items: true,
         order_id: true,
+        value: true
+      },
+
+      // GTM and custom events
+      conversion: {
+        currency: true,
+        order_id: true,
+        value: true
+      },
+
+      // Default parameters for GTM events
+      'gtm.linkClick': {
+        currency: true,
+        value: true
+      },
+      'gtm.scrollDepth': {
+        currency: true,
+        value: true
+      },
+      'gtm.load': {
+        currency: true,
+        value: true
+      },
+      'gtm.historyChange-v2': {
+        currency: true,
+        value: true
+      },
+      'scroll': {
+        currency: true,
         value: true
       }
     },
