@@ -248,13 +248,17 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       WEB: 'GTM-WS93H98',
       SERVER: 'GTM-WJ4M8T36'
     },
+    GA4: {
+      MEASUREMENT_ID: 'G-8X02967YHD',
+      STREAM_ID: '3883435767'
+    },
     ENDPOINTS: {
       WEB: 'https://www.googletagmanager.com/gtag/js',
       SERVER: 'https://server-side-tagging-542968678390.us-central1.run.app'
     }
   };
 
-  // Update processQueue function to send to both endpoints
+  // Update processQueue function
   async function processQueue() {
     if (eventQueue.length === 0) return;
 
@@ -267,7 +271,10 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ data: events })
+        body: JSON.stringify({ 
+          data: events,
+          measurement_id: CONFIG.GA4.MEASUREMENT_ID
+        })
       });
 
       // Send to Server GTM
@@ -276,13 +283,16 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ data: events })
+        body: JSON.stringify({ 
+          data: events,
+          measurement_id: CONFIG.GA4.MEASUREMENT_ID,
+          stream_id: CONFIG.GA4.STREAM_ID
+        })
       });
 
       console.log('Events processed successfully to both GTM containers');
     } catch (error) {
       console.error('Failed to process events:', error);
-      // Add events back to queue for retry
       events.forEach(event => addToQueue(event));
     }
   }
