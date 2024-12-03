@@ -134,6 +134,22 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
         'country',
         'external_id'
       ]
+    },
+    
+    // Add these to your META_EVENTS object
+    GTM_EVENTS: [
+      'gtm.linkClick',
+      'gtm.scrollDepth',
+      'gtm.load',
+      'gtm.historyChange-v2',
+      'scroll'
+    ],
+    
+    // Add this function
+    REQUIRED_PARAMS: {
+      Purchase: ['content_ids', 'value', 'currency'],
+      InitiateCheckout: ['content_ids', 'value', 'currency'],
+      // Add other events as needed
     }
   };
 
@@ -181,25 +197,117 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
     return '';
   }
 
-  // Enhanced user data collection
+  // Add enhanced scroll tracking
+  const SCROLL_THRESHOLDS = [25, 50, 75, 90];
+  let lastScrollDepth = 0;
+
+  // Enhanced getUserData function with additional fields
   function getUserData() {
+    // Get fbclid from URL or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    const fbclid = urlParams.get('fbclid');
+    
+    if (fbclid) {
+      localStorage.setItem('fbclid', fbclid);
+    }
+
+    // Create FBC with stored fbclid
+    const storedFbclid = localStorage.getItem('fbclid');
+    const fbc = storedFbclid ? `fb.1.${Date.now()}.${storedFbclid}` : getFBC();
+
     return {
       // Not hashed parameters
       client_user_agent: navigator.userAgent,
-      client_ip_address: null, // Will be set server-side
       fbp: getCookie('_fbp') || createFBP(),
-      fbc: getFBC(),
-      subscription_id: getCookie('subscription_id'),
+      fbc: fbc, // Use the constructed fbc value
+      external_id: getCookie('user_id'),
+      fb_login_id: getCookie('fb_login_id'),
       
       // Parameters to be hashed
-      em: getHashableValue('email'),
-      ph: getHashableValue('phone'),
-      ct: getHashableValue('city'),
-      st: getHashableValue('state'),
-      zp: getHashableValue('zip'),
-      country: getHashableValue('country'),
-      external_id: getCookie('user_id')
+      em: getEmailFromPage() || getCookie('user_email'),
+      ph: getPhoneFromPage() || getCookie('user_phone'),
+      fn: getValueFromPage('firstName') || getCookie('user_first_name'),
+      ln: getValueFromPage('lastName') || getCookie('user_last_name'),
+      db: getValueFromPage('dateOfBirth') || getCookie('user_dob'),
+      ct: getValueFromPage('city'),
+      st: getValueFromPage('state'),
+      zp: getValueFromPage('zip'),
+      country: getValueFromPage('country')
     };
+  }
+
+  // Add scroll tracking function
+  function initScrollTracking() {
+    window.addEventListener('scroll', debounce(() => {
+      const scrollDepth = calculateScrollDepth();
+      const threshold = getScrollThreshold(scrollDepth);
+      
+      if (threshold > lastScrollDepth) {
+        lastScrollDepth = threshold;
+        
+        // Track scroll event with enhanced parameters
+        trackEvent('scroll', {
+          percent_scrolled: threshold,
+          page_url: window.location.href,
+          page_title: document.title,
+          content_type: getContentType(),
+          value: threshold / 100, // Normalized value between 0 and 1
+          currency: 'USD'
+        });
+      }
+    }, 500));
+  }
+
+  // Helper functions
+  function calculateScrollDepth() {
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight - windowHeight;
+    const scrollTop = window.scrollY;
+    return Math.round((scrollTop / documentHeight) * 100);
+  }
+
+  function getScrollThreshold(depth) {
+    return SCROLL_THRESHOLDS.find(threshold => depth >= threshold) || 0;
+  }
+
+  function getContentType() {
+    // Determine content type based on page structure
+    if (document.querySelector('article')) return 'article';
+    if (document.querySelector('.product')) return 'product';
+    return 'page';
+  }
+
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  // Enhanced value getters
+  function getValueFromPage(field) {
+    const selectors = {
+      firstName: ['input[name="firstName"]', '#firstName', '[data-field="firstName"]'],
+      lastName: ['input[name="lastName"]', '#lastName', '[data-field="lastName"]'],
+      dateOfBirth: ['input[name="dateOfBirth"]', '#dateOfBirth', '[data-field="dob"]'],
+      city: ['input[name="city"]', '#city', '[data-field="city"]'],
+      state: ['select[name="state"]', '#state', '[data-field="state"]'],
+      zip: ['input[name="zip"]', '#zip', '[data-field="zip"]']
+    };
+
+    const fieldSelectors = selectors[field] || [];
+    for (const selector of fieldSelectors) {
+      const element = document.querySelector(selector);
+      if (element?.value) {
+        return element.value;
+      }
+    }
+    return null;
   }
 
   // Event Queue Management - preserved from old version
@@ -208,8 +316,24 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   const RETRY_DELAY = 1000;
   const MAX_RETRIES = 3;
 
-  function addToQueue(event) { /* ... */ }
-  function addToRetryQueue(event) { /* ... */ }
+  // Implement queue functions
+  function addToQueue(event) {
+    eventQueue.push(event);
+    if (eventQueue.length >= MAX_BATCH_SIZE) {
+      processQueue();
+    }
+  }
+
+  function addToRetryQueue(event) {
+    if (event.retries < MAX_RETRIES) {
+      event.retries = (event.retries || 0) + 1;
+      setTimeout(() => {
+        addToQueue(event);
+      }, RETRY_DELAY * event.retries);
+    } else {
+      console.error('Max retries exceeded for event:', event);
+    }
+  }
   
   const CONFIG = {
     GTM: {
@@ -401,4 +525,7 @@ function validateServerEvent(event) {
 if (!validateServerEvent(serverEvent)) {
   return null;
 }
+
+// Initialize scroll tracking
+document.addEventListener('DOMContentLoaded', initScrollTracking);
 
