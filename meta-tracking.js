@@ -17,6 +17,7 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   
   const META_EVENTS = {
     STANDARD: [
+      'PageView',
       'AddPaymentInfo',
       'AddToCart',
       'AddToWishlist',
@@ -35,133 +36,62 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
       'Subscribe',
       'ViewContent'
     ],
-    REQUIRED_PARAMS: {
-      'AddPaymentInfo': [
-        'action_source',
-        'content_ids',
-        'currency',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time',
-        'order_id',
-        'value'
-      ],
-      'AddToCart': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'AddToWishlist': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'CompleteRegistration': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'Contact': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'FindLocation': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'InitiateCheckout': [
-        'action_source',
-        'content_ids',
-        'content_type',
-        'contents',
-        'currency',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time',
-        'num_items',
-        'value'
-      ],
-      'Purchase': [
-        'action_source',
-        'content_ids',
-        'content_type',
-        'contents',
-        'currency',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time',
-        'num_items',
-        'order_id',
-        'value'
-      ],
-      'Schedule': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'Search': [
-        'action_source',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'StartTrial': [
-        'action_source',
-        'currency',
-        'value',
-        'predicted_ltv',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ],
-      'Subscribe': [
-        'action_source',
-        'currency',
-        'value',
-        'predicted_ltv',
-        'event_id',
-        'event_name',
-        'event_source_url',
-        'event_time'
-      ]
+    
+    EVENT_PARAMS: {
+      // Common parameters for all events
+      COMMON: {
+        action_source: true,
+        event_id: true,
+        event_name: true,
+        event_source_url: true,
+        event_time: true
+      },
+      
+      // Specific event parameters
+      AddPaymentInfo: {
+        content_ids: true,
+        currency: true,
+        order_id: true,
+        value: true
+      },
+      
+      InitiateCheckout: {
+        content_ids: true,
+        content_type: true,
+        contents: true,
+        currency: true,
+        num_items: true,
+        value: true
+      },
+      
+      Purchase: {
+        content_ids: true,
+        content_type: true,
+        contents: true,
+        currency: true,
+        num_items: true,
+        order_id: true,
+        value: true
+      }
     },
+    
+    // Customer Information Parameters - same for all events
     CUSTOMER_PARAMS: {
-      // These parameters are required for all events
-      REQUIRED: [
-        'client_user_agent',
+      NOT_HASHED: [
         'fbp',
         'fbc',
-        'client_ip_address'
+        'client_ip_address',
+        'client_user_agent',
+        'subscription_id'
       ],
-      // These should be included when available
-      OPTIONAL: [
+      TO_HASH: [
         'em',
         'ph',
         'ct',
         'st',
         'zp',
         'country',
-        'external_id',
-        'subscription_id'
+        'external_id'
       ]
     }
   };
@@ -213,24 +143,21 @@ if (window._fbq && window._fbq.pixelId !== '766014511309126') {
   // Enhanced user data collection
   function getUserData() {
     return {
+      // Not hashed parameters
       client_user_agent: navigator.userAgent,
-      client_ip_address: null,
+      client_ip_address: null, // Will be set server-side
       fbp: getCookie('_fbp') || createFBP(),
       fbc: getFBC(),
-      fb_login_id: getCookie('fb_login_id'),
-      external_id: getCookie('user_id'),
       subscription_id: getCookie('subscription_id'),
-      em: null,
-      ph: null,
-      fn: null,
-      ln: null,
-      ge: null,
-      db: null,
-      ct: null,
-      st: null,
-      zp: null,
-      country: null,
-      lead_id: null
+      
+      // Parameters to be hashed
+      em: getHashableValue('email'),
+      ph: getHashableValue('phone'),
+      ct: getHashableValue('city'),
+      st: getHashableValue('state'),
+      zp: getHashableValue('zip'),
+      country: getHashableValue('country'),
+      external_id: getCookie('user_id')
     };
   }
 
