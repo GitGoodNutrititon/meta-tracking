@@ -1,531 +1,461 @@
-// Check if pixel is already initialized
-if (window.fbq) {
-  console.log('Meta Pixel already initialized');
-} else {
-  console.error('Meta Pixel not initialized. Events will not track properly. Please ensure Facebook Header Code is loaded first.');
-  throw new Error('Facebook Pixel must be initialized before meta-tracking.js');
-}
+/**
+ * Bullard Nutrition Meta Pixel Advanced Tracking System
+ * Compatible with Header Code V2 - Performance Optimized
+ * 
+ * Features:
+ * - Enhanced Conversions API integration
+ * - Automatic event detection and tracking
+ * - Smart user data collection
+ * - Performance optimized queuing
+ * - Error handling and retry logic
+ * - GTM integration
+ */
 
-// Verify pixel ID matches
-if (window._fbq && window._fbq.pixelId !== '766014511309126') {
-  console.warn('Pixel ID mismatch detected');
-}
-// Meta Tracking Code
-(async function() {
-  const PIXEL_ID = '766014511309126';  // Bullard Nutrition Pixel
-  const SERVER_URL = "https://server-side-tagging-542968678390.us-central1.run.app";
-  
-  const META_EVENTS = {
-    STANDARD: [
-      'PageView',
-      'AddPaymentInfo',
-      'AddToCart',
-      'AddToWishlist',
-      'CompleteRegistration',
-      'Contact',
-      'FindLocation',
-      'InitiateCheckout',
-      'Purchase',
-      'Schedule',
-      'Search',
-      'StartTrial',
-      'CustomizeProduct',
-      'Donate',
-      'Lead',
-      'SubmitApplication',
-      'Subscribe',
-      'ViewContent',
-      'conversion',
-      'gtm.historyChange-v2',
-      'gtm.linkClick',
-      'gtm.load',
-      'gtm.scrollDepth',
-      'scroll'
-    ],
+(function() {
+    'use strict';
     
-    EVENT_PARAMS: {
-      // Common parameters for all events
-      COMMON: {
-        action_source: true,
-        event_id: true,
-        event_name: true,
-        event_source_url: true,
-        event_time: true
-      },
-      
-      // Event-specific parameters
-      AddPaymentInfo: {
-        content_ids: true,
-        currency: true,
-        order_id: true,
-        value: true
-      },
-      
-      AddToCart: {
-        content_ids: true,
-        currency: true,
-        value: true
-      },
-      
-      InitiateCheckout: {
-        content_ids: true,
-        content_type: true,
-        contents: true,
-        currency: true,
-        num_items: true,
-        value: true
-      },
-      
-      Purchase: {
-        content_ids: true,
-        content_type: true,
-        contents: true,
-        currency: true,
-        num_items: true,
-        order_id: true,
-        value: true
-      },
-
-      // GTM and custom events
-      conversion: {
-        currency: true,
-        order_id: true,
-        value: true
-      },
-
-      // Default parameters for GTM events
-      'gtm.linkClick': {
-        currency: true,
-        value: true
-      },
-      'gtm.scrollDepth': {
-        currency: true,
-        value: true
-      },
-      'gtm.load': {
-        currency: true,
-        value: true
-      },
-      'gtm.historyChange-v2': {
-        currency: true,
-        value: true
-      },
-      'scroll': {
-        currency: true,
-        value: true
-      }
-    },
-    
-    // Customer Information Parameters - same for all events
-    CUSTOMER_PARAMS: {
-      NOT_HASHED: [
-        'fbp',
-        'fbc',
-        'client_ip_address',
-        'client_user_agent',
-        'subscription_id'
-      ],
-      TO_HASH: [
-        'em',
-        'ph',
-        'ct',
-        'st',
-        'zp',
-        'country',
-        'external_id'
-      ]
-    },
-    
-    // Add these to your META_EVENTS object
-    GTM_EVENTS: [
-      'gtm.linkClick',
-      'gtm.scrollDepth',
-      'gtm.load',
-      'gtm.historyChange-v2',
-      'scroll'
-    ],
-    
-    // Add this function
-    REQUIRED_PARAMS: {
-      Purchase: ['content_ids', 'value', 'currency'],
-      InitiateCheckout: ['content_ids', 'value', 'currency'],
-      // Add other events as needed
-    }
-  };
-
-  // Add GTM to Meta event mapping
-  const GTM_TO_META_MAPPING = {
-    'gtm.linkClick': 'Click',
-    'form_submit': 'Lead',
-    'form_start': 'InitiateForm',
-    'gtm.scrollDepth': 'PageScroll',
-    // Add other mappings as needed
-  };
-
-  // Utility Functions
-  function generateUniqueId() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
-
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return '';
-  }
-
-  function createFBP() {
-    const now = Date.now();
-    const randNumber = Math.floor(Math.random() * 1000000000);
-    return `fb.1.${now}.${randNumber}`;
-  }
-
-  function getFBC() {
-    const fbcCookie = getCookie('fbc');
-    if (fbcCookie) return fbcCookie;
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const fbclid = urlParams.get('fbclid');
-    if (fbclid) {
-      const fbc = `fb.1.${Date.now()}.${fbclid}`;
-      document.cookie = `fbc=${fbc}; path=/; max-age=7776000`;
-      return fbc;
-    }
-    return '';
-  }
-
-  // Add enhanced scroll tracking
-  const SCROLL_THRESHOLDS = [25, 50, 75, 90];
-  let lastScrollDepth = 0;
-
-  // Enhanced getUserData function with additional fields
-  function getUserData() {
-    // Get fbclid from URL or localStorage
-    const urlParams = new URLSearchParams(window.location.search);
-    const fbclid = urlParams.get('fbclid');
-    
-    if (fbclid) {
-      localStorage.setItem('fbclid', fbclid);
-    }
-
-    // Create FBC with stored fbclid
-    const storedFbclid = localStorage.getItem('fbclid');
-    const fbc = storedFbclid ? `fb.1.${Date.now()}.${storedFbclid}` : getFBC();
-
-    return {
-      // Not hashed parameters
-      client_user_agent: navigator.userAgent,
-      fbp: getCookie('_fbp') || createFBP(),
-      fbc: fbc, // Use the constructed fbc value
-      external_id: getCookie('user_id'),
-      fb_login_id: getCookie('fb_login_id'),
-      
-      // Parameters to be hashed
-      em: getEmailFromPage() || getCookie('user_email'),
-      ph: getPhoneFromPage() || getCookie('user_phone'),
-      fn: getValueFromPage('firstName') || getCookie('user_first_name'),
-      ln: getValueFromPage('lastName') || getCookie('user_last_name'),
-      db: getValueFromPage('dateOfBirth') || getCookie('user_dob'),
-      ct: getValueFromPage('city'),
-      st: getValueFromPage('state'),
-      zp: getValueFromPage('zip'),
-      country: getValueFromPage('country')
+    // Configuration
+    const CONFIG = {
+        PIXEL_ID: '766014511309126',
+        SERVER_ENDPOINT: 'https://server-side-tagging-542968678390.us-central1.run.app',
+        GTM_CONTAINERS: {
+            WEB: 'GTM-WS93H98',
+            SERVER: 'GTM-WJ4M8T36'
+        },
+        GA4_MEASUREMENT_ID: 'G-8X02967YHD',
+        QUEUE: {
+            MAX_BATCH_SIZE: 5,
+            PROCESS_INTERVAL: 2000,
+            MAX_RETRIES: 3,
+            RETRY_DELAY: 1000
+        },
+        SCROLL_THRESHOLDS: [25, 50, 75, 90]
     };
-  }
 
-  // Add scroll tracking function
-  function initScrollTracking() {
-    window.addEventListener('scroll', debounce(() => {
-      const scrollDepth = calculateScrollDepth();
-      const threshold = getScrollThreshold(scrollDepth);
-      
-      if (threshold > lastScrollDepth) {
-        lastScrollDepth = threshold;
-        
-        // Track scroll event with enhanced parameters
-        trackEvent('scroll', {
-          percent_scrolled: threshold,
-          page_url: window.location.href,
-          page_title: document.title,
-          content_type: getContentType(),
-          value: threshold / 100, // Normalized value between 0 and 1
-          currency: 'USD'
+    // State management
+    let state = {
+        initialized: false,
+        eventQueue: [],
+        scrollDepth: 0,
+        pageStartTime: Date.now(),
+        sessionId: generateSessionId()
+    };
+
+    // Event definitions
+    const META_EVENTS = {
+        STANDARD: [
+            'PageView', 'Purchase', 'InitiateCheckout', 'AddToCart', 
+            'AddPaymentInfo', 'CompleteRegistration', 'Contact', 
+            'Lead', 'Subscribe', 'ViewContent', 'Search'
+        ],
+        CUSTOM: [
+            'scroll_depth', 'time_on_page', 'form_interaction', 
+            'button_click', 'video_engagement'
+        ]
+    };
+
+    // Utility Functions
+    function generateSessionId() {
+        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function generateEventId() {
+        return 'event_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        return parts.length === 2 ? parts.pop().split(';').shift() : null;
+    }
+
+    function setCookie(name, value, days = 90) {
+        const expires = new Date(Date.now() + days * 864e5).toUTCString();
+        document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax`;
+    }
+
+    function createFBP() {
+        let fbp = getCookie('_fbp');
+        if (!fbp) {
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 1000000000);
+            fbp = `fb.1.${timestamp}.${random}`;
+            setCookie('_fbp', fbp);
+        }
+        return fbp;
+    }
+
+    function createFBC() {
+        let fbc = getCookie('_fbc');
+        if (!fbc) {
+            // Check for fbclid in URL or localStorage
+            const urlParams = new URLSearchParams(window.location.search);
+            const fbclid = urlParams.get('fbclid') || localStorage.getItem('fbclid');
+            
+            if (fbclid) {
+                fbc = `fb.1.${Date.now()}.${fbclid}`;
+                setCookie('_fbc', fbc);
+                localStorage.setItem('fbclid', fbclid);
+            }
+        }
+        return fbc;
+    }
+
+    // Enhanced user data collection
+    function getUserData() {
+        const userData = {
+            // Browser fingerprinting
+            client_user_agent: navigator.userAgent,
+            client_ip_address: null, // Server-side only
+            
+            // Facebook specific
+            fbp: createFBP(),
+            fbc: createFBC(),
+            
+            // User identifiers (will be hashed server-side)
+            external_id: getCookie('user_id') || localStorage.getItem('user_id'),
+            em: getEmailFromForms() || getCookie('user_email'),
+            ph: getPhoneFromForms() || getCookie('user_phone'),
+            fn: getCookie('user_first_name'),
+            ln: getCookie('user_last_name'),
+            db: getCookie('user_dob'),
+            ct: getCookie('user_city'),
+            st: getCookie('user_state'),
+            zp: getCookie('user_zip'),
+            country: getCookie('user_country') || 'US'
+        };
+
+        // Clean up undefined values
+        Object.keys(userData).forEach(key => {
+            if (userData[key] === null || userData[key] === undefined || userData[key] === '') {
+                delete userData[key];
+            }
         });
-      }
-    }, 500));
-  }
 
-  // Helper functions
-  function calculateScrollDepth() {
-    const windowHeight = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight - windowHeight;
-    const scrollTop = window.scrollY;
-    return Math.round((scrollTop / documentHeight) * 100);
-  }
-
-  function getScrollThreshold(depth) {
-    return SCROLL_THRESHOLDS.find(threshold => depth >= threshold) || 0;
-  }
-
-  function getContentType() {
-    // Determine content type based on page structure
-    if (document.querySelector('article')) return 'article';
-    if (document.querySelector('.product')) return 'product';
-    return 'page';
-  }
-
-  function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  }
-
-  // Enhanced value getters
-  function getValueFromPage(field) {
-    const selectors = {
-      firstName: ['input[name="firstName"]', '#firstName', '[data-field="firstName"]'],
-      lastName: ['input[name="lastName"]', '#lastName', '[data-field="lastName"]'],
-      dateOfBirth: ['input[name="dateOfBirth"]', '#dateOfBirth', '[data-field="dob"]'],
-      city: ['input[name="city"]', '#city', '[data-field="city"]'],
-      state: ['select[name="state"]', '#state', '[data-field="state"]'],
-      zip: ['input[name="zip"]', '#zip', '[data-field="zip"]']
-    };
-
-    const fieldSelectors = selectors[field] || [];
-    for (const selector of fieldSelectors) {
-      const element = document.querySelector(selector);
-      if (element?.value) {
-        return element.value;
-      }
+        return userData;
     }
-    return null;
-  }
 
-  // Event Queue Management - preserved from old version
-  let eventQueue = [];
-  const MAX_BATCH_SIZE = 10;
-  const RETRY_DELAY = 1000;
-  const MAX_RETRIES = 3;
+    // Smart form data extraction
+    function getEmailFromForms() {
+        const emailSelectors = [
+            'input[type="email"]',
+            'input[name*="email" i]',
+            'input[id*="email" i]',
+            'input[placeholder*="email" i]'
+        ];
 
-  // Implement queue functions
-  function addToQueue(event) {
-    eventQueue.push(event);
-    if (eventQueue.length >= MAX_BATCH_SIZE) {
-      processQueue();
+        for (const selector of emailSelectors) {
+            const element = document.querySelector(selector);
+            if (element && element.value && isValidEmail(element.value)) {
+                return element.value.toLowerCase().trim();
+            }
+        }
+        return null;
     }
-  }
 
-  function addToRetryQueue(event) {
-    if (event.retries < MAX_RETRIES) {
-      event.retries = (event.retries || 0) + 1;
-      setTimeout(() => {
-        addToQueue(event);
-      }, RETRY_DELAY * event.retries);
+    function getPhoneFromForms() {
+        const phoneSelectors = [
+            'input[type="tel"]',
+            'input[name*="phone" i]',
+            'input[id*="phone" i]',
+            'input[placeholder*="phone" i]'
+        ];
+
+        for (const selector of phoneSelectors) {
+            const element = document.querySelector(selector);
+            if (element && element.value) {
+                return element.value.replace(/\D/g, ''); // Remove non-digits
+            }
+        }
+        return null;
+    }
+
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    // Event tracking system
+    async function trackEvent(eventName, customData = {}, options = {}) {
+        if (!state.initialized) {
+            console.warn('Meta tracking not initialized. Queuing event:', eventName);
+            return queueEvent(eventName, customData, options);
+        }
+
+        try {
+            const eventId = generateEventId();
+            const eventTime = Math.floor(Date.now() / 1000);
+            const userData = getUserData();
+
+            // Base event structure for Conversions API
+            const serverEvent = {
+                event_name: eventName,
+                event_id: eventId,
+                event_time: eventTime,
+                event_source_url: window.location.href,
+                action_source: 'website',
+                user_data: userData,
+                custom_data: {
+                    currency: customData.currency || 'USD',
+                    value: customData.value || 0,
+                    content_name: customData.content_name || document.title,
+                    content_category: customData.content_category || getPageCategory(),
+                    ...customData
+                }
+            };
+
+            // Enhanced data for specific events
+            if (eventName === 'Purchase' || eventName === 'InitiateCheckout') {
+                serverEvent.custom_data = {
+                    ...serverEvent.custom_data,
+                    content_ids: customData.content_ids || ['unknown'],
+                    content_type: customData.content_type || 'product',
+                    num_items: customData.num_items || 1
+                };
+            }
+
+            // Client-side pixel tracking (immediate)
+            if (window.fbq && typeof window.fbq === 'function') {
+                const pixelData = {
+                    ...serverEvent.custom_data,
+                    event_id: eventId
+                };
+                
+                window.fbq('track', eventName, pixelData);
+                console.log(`✅ Client-side pixel: ${eventName}`, pixelData);
+            }
+
+            // Server-side tracking (queued)
+            addToQueue(serverEvent);
+            
+            // GTM integration
+            if (window.dataLayer) {
+                window.dataLayer.push({
+                    event: 'meta_pixel_event',
+                    event_name: eventName,
+                    event_id: eventId,
+                    custom_data: serverEvent.custom_data
+                });
+            }
+
+            console.log(`📊 Event tracked: ${eventName}`, {
+                eventId,
+                client: true,
+                server: 'queued'
+            });
+
+            return eventId;
+
+        } catch (error) {
+            console.error('❌ Failed to track event:', eventName, error);
+            return null;
+        }
+    }
+
+    // Queue management
+    function addToQueue(event) {
+        state.eventQueue.push({
+            ...event,
+            attempts: 0,
+            timestamp: Date.now()
+        });
+
+        if (state.eventQueue.length >= CONFIG.QUEUE.MAX_BATCH_SIZE) {
+            processQueue();
+        }
+    }
+
+    function queueEvent(eventName, customData, options) {
+        const queuedEvent = {
+            eventName,
+            customData,
+            options,
+            timestamp: Date.now()
+        };
+        
+        // Store in localStorage for persistence
+        const queuedEvents = JSON.parse(localStorage.getItem('meta_queued_events') || '[]');
+        queuedEvents.push(queuedEvent);
+        localStorage.setItem('meta_queued_events', JSON.stringify(queuedEvents));
+        
+        return 'queued_' + Date.now();
+    }
+
+    async function processQueue() {
+        if (state.eventQueue.length === 0) return;
+
+        const events = state.eventQueue.splice(0, CONFIG.QUEUE.MAX_BATCH_SIZE);
+        
+        try {
+            const response = await fetch(CONFIG.SERVER_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': navigator.userAgent
+                },
+                body: JSON.stringify({
+                    data: events,
+                    access_token: 'server_side', // Server will handle token
+                    pixel_id: CONFIG.PIXEL_ID
+                })
+            });
+
+            if (response.ok) {
+                console.log(`✅ Server events processed: ${events.length}`);
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to process server events:', error);
+            
+            // Retry logic
+            events.forEach(event => {
+                if (event.attempts < CONFIG.QUEUE.MAX_RETRIES) {
+                    event.attempts++;
+                    setTimeout(() => {
+                        state.eventQueue.push(event);
+                    }, CONFIG.QUEUE.RETRY_DELAY * event.attempts);
+                }
+            });
+        }
+    }
+
+    // Automatic event detection
+    function initAutoTracking() {
+        // Scroll depth tracking
+        let scrollTimeout;
+        window.addEventListener('scroll', () => {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                const scrollPercent = Math.round(
+                    (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100
+                );
+                
+                const threshold = CONFIG.SCROLL_THRESHOLDS.find(t => scrollPercent >= t && t > state.scrollDepth);
+                if (threshold) {
+                    state.scrollDepth = threshold;
+                    trackEvent('scroll_depth', {
+                        scroll_depth: threshold,
+                        page_location: window.location.href
+                    });
+                }
+            }, 100);
+        });
+
+        // Form interactions
+        document.addEventListener('focusin', (e) => {
+            if (e.target.matches('input, textarea, select')) {
+                trackEvent('form_interaction', {
+                    form_field: e.target.name || e.target.id || 'unknown',
+                    form_type: e.target.form?.name || 'unknown'
+                });
+            }
+        });
+
+        // Button clicks
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('button, .btn, [role="button"]');
+            if (button) {
+                trackEvent('button_click', {
+                    button_text: button.textContent?.trim() || 'unknown',
+                    button_location: window.location.pathname
+                });
+            }
+        });
+
+        // Time on page tracking
+        setInterval(() => {
+            const timeOnPage = Math.floor((Date.now() - state.pageStartTime) / 1000);
+            if (timeOnPage % 30 === 0) { // Every 30 seconds
+                trackEvent('time_on_page', {
+                    time_on_page: timeOnPage,
+                    page_location: window.location.href
+                });
+            }
+        }, 30000);
+    }
+
+    // Helper functions
+    function getPageCategory() {
+        const path = window.location.pathname;
+        if (path.includes('blog')) return 'blog';
+        if (path.includes('product')) return 'product';
+        if (path.includes('checkout')) return 'checkout';
+        if (path.includes('contact')) return 'contact';
+        return 'general';
+    }
+
+    function processQueuedEvents() {
+        const queuedEvents = JSON.parse(localStorage.getItem('meta_queued_events') || '[]');
+        if (queuedEvents.length > 0) {
+            console.log(`Processing ${queuedEvents.length} queued events`);
+            queuedEvents.forEach(({ eventName, customData, options }) => {
+                trackEvent(eventName, customData, options);
+            });
+            localStorage.removeItem('meta_queued_events');
+        }
+    }
+
+    // Initialization
+    function initialize() {
+        // Check if Meta Pixel is loaded
+        if (!window.fbq || typeof window.fbq !== 'function') {
+            console.error('❌ Meta Pixel not found. Tracking will be server-side only.');
+            return false;
+        }
+
+        // Verify pixel ID
+        if (window.fbq.pixelId && window.fbq.pixelId !== CONFIG.PIXEL_ID) {
+            console.warn('⚠️ Pixel ID mismatch detected');
+        }
+
+        state.initialized = true;
+        
+        // Start queue processor
+        setInterval(processQueue, CONFIG.QUEUE.PROCESS_INTERVAL);
+        
+        // Initialize auto-tracking
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAutoTracking);
+        } else {
+            initAutoTracking();
+        }
+
+        // Process any queued events
+        processQueuedEvents();
+
+        // Track initial page view
+        trackEvent('PageView', {
+            page_title: document.title,
+            page_location: window.location.href,
+            referrer: document.referrer
+        });
+
+        console.log('✅ Meta Tracking System initialized');
+        return true;
+    }
+
+    // Public API
+    window.BullardMetaTracking = {
+        track: trackEvent,
+        initialize: initialize,
+        getState: () => ({ ...state }),
+        CONFIG: CONFIG,
+        META_EVENTS: META_EVENTS
+    };
+
+    // Auto-initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize);
     } else {
-      console.error('Max retries exceeded for event:', event);
+        // Small delay to ensure Meta Pixel is loaded
+        setTimeout(initialize, 500);
     }
-  }
-  
-  const CONFIG = {
-    GTM: {
-      WEB: 'GTM-WS93H98',
-      SERVER: 'GTM-WJ4M8T36'
-    },
-    GA4: {
-      MEASUREMENT_ID: 'G-8X02967YHD',
-      STREAM_ID: '3883435767'
-    },
-    ENDPOINTS: {
-      WEB: 'https://www.googletagmanager.com/gtag/js',
-      SERVER: 'https://server-side-tagging-542968678390.us-central1.run.app'
-    }
-  };
 
-  // Update processQueue function
-  async function processQueue() {
-    if (eventQueue.length === 0) return;
-
-    const events = eventQueue.splice(0, MAX_BATCH_SIZE);
-    
-    try {
-      // Send to Web GTM
-      await fetch(`${CONFIG.ENDPOINTS.WEB}?id=${CONFIG.GTM.WEB}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          data: events,
-          measurement_id: CONFIG.GA4.MEASUREMENT_ID
-        })
-      });
-
-      // Send to Server GTM
-      await fetch(CONFIG.ENDPOINTS.SERVER, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          data: events,
-          measurement_id: CONFIG.GA4.MEASUREMENT_ID,
-          stream_id: CONFIG.GA4.STREAM_ID
-        })
-      });
-
-      console.log('Events processed successfully to both GTM containers');
-    } catch (error) {
-      console.error('Failed to process events:', error);
-      events.forEach(event => addToQueue(event));
-    }
-  }
-
-  // Enhanced validation
-  function validateEventParams(eventName, params, userData) {
-    // Check event-specific parameters
-    const requiredParams = META_EVENTS.REQUIRED_PARAMS[eventName] || [];
-    const missingParams = requiredParams.filter(param => !params[param]);
-    
-    // Check customer parameters
-    const requiredCustomerParams = META_EVENTS.CUSTOMER_PARAMS.REQUIRED;
-    const missingCustomerParams = requiredCustomerParams.filter(param => !userData[param]);
-
-    if (missingParams.length || missingCustomerParams.length) {
-      console.warn(`Missing parameters for ${eventName}:`, {
-        eventParams: missingParams,
-        customerParams: missingCustomerParams
-      });
-      return false;
-    }
-    return true;
-  }
-
-  // Replace the existing trackEvent function with this updated version
-  async function trackEvent(eventName, eventParams = {}) {
-    try {
-      const isStandardEvent = META_EVENTS.STANDARD.includes(eventName);
-      const isGTMEvent = META_EVENTS.GTM_EVENTS.includes(eventName);
-      
-      if (!isStandardEvent && !isGTMEvent) {
-        console.warn(`Warning: ${eventName} is not a recognized event name`);
-      }
-
-      const eventId = generateUniqueId();
-      const eventTime = Math.floor(Date.now() / 1000);
-      const userData = getUserData();
-
-      // Base event data structure
-      const eventData = {
-        action_source: "website",
-        event_id: eventId,
-        event_name: eventName,
-        event_source_url: window.location.href,
-        event_time: eventTime,
-        user_data: userData,
-        custom_data: {
-          currency: eventParams.currency || "USD",
-          value: eventParams.value || "0.00"
-        }
-      };
-
-      // Add event-specific parameters based on event type
-      switch(eventName) {
-        case 'Purchase':
-        case 'InitiateCheckout':
-          eventData.custom_data = {
-            ...eventData.custom_data,
-            content_ids: eventParams.content_ids || [],
-            content_type: eventParams.content_type || "product",
-            contents: eventParams.contents || [],
-            num_items: eventParams.num_items,
-            order_id: eventParams.order_id
-          };
-          break;
-        case 'AddPaymentInfo':
-          eventData.custom_data = {
-            ...eventData.custom_data,
-            content_ids: eventParams.content_ids || [],
-            order_id: eventParams.order_id
-          };
-          break;
-        // Add other specific event types as needed
-      }
-
-      // 1. Track via browser pixel (client-side)
-      const pixelData = {
-        ...eventData.custom_data,
-        event_id: eventId,
-        user_data: {
-          fbp: userData.fbp,
-          fbc: userData.fbc
-        }
-      };
-      
-      // Send to Meta Pixel
-      fbq('track', eventName, pixelData);
-
-      // 2. Queue for server-side tracking (Conversions API)
-      addToQueue(eventData);
-      
-      // Log successful tracking
-      console.log(`Event ${eventName} tracked successfully`, {
-        eventId,
-        pixel: true,
-        server: true
-      });
-
-      return eventId;
-    } catch (error) {
-      console.error('Failed to track event:', error);
-      return null;
-    }
-  }
-
-  // Start queue processor
-  setInterval(processQueue, 1000);
-
-  // Expose tracking function globally
-  window.metaTracker = {
-    trackEvent,
-    META_EVENTS
-  };
 })();
 
-// Add this validation function
-function validateServerEvent(event) {
-  // Required fields validation
-  const requiredFields = ['event_name', 'event_time', 'user_data', 'action_source'];
-  const missingFields = requiredFields.filter(field => !event[field]);
-  
-  if (missingFields.length > 0) {
-    console.error('Missing required fields:', missingFields);
-    return false;
-  }
-  
-  // Validate event_time is within 7 days
-  const sevenDaysAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
-  if (event.event_time < sevenDaysAgo) {
-    console.error('event_time must be within the last 7 days');
-    return false;
-  }
-  
-  return true;
+// Export for module systems
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = window.BullardMetaTracking;
 }
-
-// Use validation before sending
-if (!validateServerEvent(serverEvent)) {
-  return null;
-}
-
-// Initialize scroll tracking
-document.addEventListener('DOMContentLoaded', initScrollTracking);
-
